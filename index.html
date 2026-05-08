@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PA#1 — WebGL Stereo Camera DROP</title>
+    <style>
+        :root {
+            --bg: #10131a;
+            --panel: #1b2130;
+            --text: #e7ecf7;
+            --muted: #aab4c6;
+            --accent: #6fb6ff;
+            --border: #30384a;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: radial-gradient(circle at top, #20283a 0, var(--bg) 42rem);
+            color: var(--text);
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        main {
+            width: min(1180px, calc(100vw - 32px));
+            margin: 0 auto;
+            padding: 24px 0 32px;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            margin: 0 0 18px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 340px;
+            gap: 18px;
+            align-items: start;
+        }
+
+        #canvas-holder,
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: rgba(27, 33, 48, 0.88);
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+        }
+
+        #canvas-holder {
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: min(72vh, 760px);
+            min-height: 560px;
+            background: #020308;
+            cursor: grab;
+        }
+
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        .panel {
+            padding: 18px;
+        }
+
+        .panel h2 {
+            margin: 0 0 14px;
+            font-size: 18px;
+        }
+
+        .control {
+            display: grid;
+            grid-template-columns: 1fr 78px;
+            gap: 8px 12px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .control label {
+            grid-column: 1 / -1;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+        }
+
+        input[type="number"] {
+            width: 78px;
+            padding: 7px 8px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #101522;
+            color: var(--text);
+        }
+
+        button {
+            width: 100%;
+            padding: 10px 12px;
+            border: 0;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #07101d;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button:hover {
+            filter: brightness(1.08);
+        }
+
+        .hint,
+        #webcamStatus {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .hint {
+            margin-top: 16px;
+        }
+
+        #webcamStatus {
+            margin: 10px 0 0;
+        }
+
+        #webcamVideo {
+            display: none;
+        }
+
+        @media (max-width: 900px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            canvas {
+                min-height: 420px;
+            }
+        }
+    </style>
+
+    <script defer src="./Utils/trackball-rotator.js?v=pa1-drop-v3"></script>
+    <script defer src="./Utils/m4.js?v=pa1-drop-v3"></script>
+    <script defer src="./shader.js?v=pa1-drop-v3"></script>
+    <script defer src="./Model.js?v=pa1-drop-v3"></script>
+    <script defer src="./StereoCamera.js?v=pa1-drop-v3"></script>
+    <script defer src="./main-drop-final-v3.js?v=pa1-drop-v3"></script>
+</head>
+<body>
+<main>
+    <h1>PA#1 — WebGL anaglyphic stereo camera — DROP model</h1>
+    <p class="subtitle">
+        Drag the DROP model with the mouse to rotate it around the center of mass. Use red/cyan anaglyphic glasses.
+        The webcam stream is drawn in the zero-parallax plane, while the wireframe surface is placed closer to
+        the viewer to create negative parallax.
+    </p>
+
+    <div class="layout">
+        <div id="canvas-holder">
+            <canvas width="960" height="720" id="webglcanvas"></canvas>
+        </div>
+
+        <aside class="panel">
+            <h2>Stereo camera parameters</h2>
+
+            <div class="control">
+                <label for="eyeSeparation">Eye separation</label>
+                <input id="eyeSeparation" type="range" min="0.00" max="1.20" step="0.01" value="0.34">
+                <input id="eyeSeparationValue" type="number" min="0.00" max="1.20" step="0.01" value="0.34">
+            </div>
+
+            <div class="control">
+                <label for="fovDegrees">Field of View angle, degrees</label>
+                <input id="fovDegrees" type="range" min="24" max="90" step="1" value="45">
+                <input id="fovDegreesValue" type="number" min="24" max="90" step="1" value="45">
+            </div>
+
+            <div class="control">
+                <label for="nearClippingDistance">Near clipping distance</label>
+                <input id="nearClippingDistance" type="range" min="0.20" max="7.50" step="0.05" value="1.00">
+                <input id="nearClippingDistanceValue" type="number" min="0.20" max="7.50" step="0.05" value="1.00">
+            </div>
+
+            <div class="control">
+                <label for="convergence">Convergence distance / zero-parallax plane</label>
+                <input id="convergence" type="range" min="4.00" max="20.00" step="0.10" value="8.00">
+                <input id="convergenceValue" type="number" min="4.00" max="20.00" step="0.10" value="8.00">
+            </div>
+
+            <button id="startWebcamButton" type="button">Start / restart webcam</button>
+            <p id="webcamStatus">Webcam is not started yet. Press the button and allow camera access.</p>
+
+            <p class="hint">
+                Run from localhost or HTTPS. Near clipping becomes clearly visible at high values: it cuts the DROP model when the near plane reaches the object. If Chrome blocks the camera, click the icon near the address bar → Camera → Allow, then reload the page.
+            </p>
+        </aside>
+    </div>
+
+    <video id="webcamVideo" autoplay muted playsinline></video>
+</main>
+</body>
+</html>

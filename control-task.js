@@ -1,4 +1,4 @@
-'use strict';
+use strict';
 
 (function() {
     const THREE = AFRAME.THREE;
@@ -94,15 +94,18 @@
         const headGeometry = new THREE.ShapeGeometry(headShape);
         const headMaterial = new THREE.MeshBasicMaterial({
             color: 0xff3045,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            depthTest: false
         });
         const head = new THREE.Mesh(headGeometry, headMaterial);
-        head.rotation.x = -Math.PI / 2;
         head.position.set(0, 2.55, 0.92);
         group.add(head);
 
-        const tailGeometry = new THREE.BoxGeometry(0.12, 0.06, 1.35);
-        const tailMaterial = new THREE.MeshBasicMaterial({ color: 0x22d3ee });
+        const tailGeometry = new THREE.BoxGeometry(0.12, 1.35, 0.06);
+        const tailMaterial = new THREE.MeshBasicMaterial({
+            color: 0x22d3ee,
+            depthTest: false
+        });
         const tail = new THREE.Mesh(tailGeometry, tailMaterial);
         tail.position.set(0, 2.56, 0.0);
         group.add(tail);
@@ -110,22 +113,71 @@
         return group;
     }
 
+    function makeCameraVideoVisible() {
+        const scene = document.querySelector('a-scene');
+
+        function applyRendererTransparency() {
+            if (scene && scene.renderer) {
+                scene.renderer.setClearColor(new THREE.Color(0x000000), 0);
+                if (scene.renderer.setClearAlpha) {
+                    scene.renderer.setClearAlpha(0);
+                }
+            }
+        }
+
+        function applyVideoStyles() {
+            const videos = document.querySelectorAll('video, #arjs-video, .arjs-video');
+            videos.forEach(function(video) {
+                video.style.position = 'fixed';
+                video.style.top = '0';
+                video.style.left = '0';
+                video.style.width = '100vw';
+                video.style.height = '100vh';
+                video.style.objectFit = 'cover';
+                video.style.display = 'block';
+                video.style.visibility = 'visible';
+                video.style.opacity = '1';
+                video.style.zIndex = '0';
+                video.style.background = 'transparent';
+            });
+        }
+
+        applyRendererTransparency();
+        applyVideoStyles();
+
+        if (scene) {
+            scene.addEventListener('loaded', applyRendererTransparency);
+            scene.addEventListener('renderstart', applyRendererTransparency);
+        }
+
+        // AR.js creates the video asynchronously, so repeat the fix a few times.
+        [300, 800, 1500, 2500, 4000].forEach(function(delay) {
+            window.setTimeout(function() {
+                applyRendererTransparency();
+                applyVideoStyles();
+            }, delay);
+        });
+    }
+
     AFRAME.registerComponent('drop-surface', {
         init: function() {
             const group = new THREE.Group();
             const geometry = createDropGeometry();
 
-            const surfaceMaterial = new THREE.MeshStandardMaterial({
+            // Rotate the DROP surface onto the marker plane so it is clearly visible
+            // when the marker is displayed on a laptop screen.
+            group.rotation.x = -Math.PI / 2;
+
+            const surfaceMaterial = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
-                emissive: 0x334155,
-                roughness: 0.38,
-                metalness: 0.12,
-                side: THREE.DoubleSide
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.36,
+                depthTest: false
             });
 
             const surface = new THREE.Mesh(geometry, surfaceMaterial);
-            surface.castShadow = true;
-            surface.receiveShadow = true;
+            surface.renderOrder = 3;
             group.add(surface);
 
             const wireframe = new THREE.LineSegments(
@@ -133,25 +185,35 @@
                 new THREE.LineBasicMaterial({
                     color: 0xffb020,
                     transparent: true,
-                    opacity: 0.9
+                    opacity: 1.0,
+                    depthTest: false
                 })
             );
+            wireframe.renderOrder = 4;
             group.add(wireframe);
 
+            const outline = new THREE.LineSegments(
+                new THREE.WireframeGeometry(geometry),
+                new THREE.LineBasicMaterial({
+                    color: 0x00e5ff,
+                    transparent: true,
+                    opacity: 0.8,
+                    depthTest: false
+                })
+            );
+            outline.scale.set(1.012, 1.012, 1.012);
+            outline.renderOrder = 5;
+            group.add(outline);
+
             group.add(createNeedle());
-
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-            group.add(ambientLight);
-
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.95);
-            directionalLight.position.set(2.2, 3.4, 2.5);
-            group.add(directionalLight);
 
             this.el.setObject3D('dropSurface', group);
         }
     });
 
     window.addEventListener('load', function() {
+        makeCameraVideoVisible();
+
         const marker = document.getElementById('variantMarker');
         const status = document.getElementById('trackingStatus');
 
@@ -162,11 +224,13 @@
         marker.addEventListener('markerFound', function() {
             status.textContent = 'Marker found: DROP surface is aligned to template 14.';
             status.classList.add('ok');
+            makeCameraVideoVisible();
         });
 
         marker.addEventListener('markerLost', function() {
             status.textContent = 'Searching for marker...';
             status.classList.remove('ok');
+            makeCameraVideoVisible();
         });
     });
 }());

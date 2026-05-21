@@ -1,8 +1,4 @@
-/*
- * Control Task — variant 14.
- * AR.js/A-Frame component that renders the same DROP surface from PA#1/PA#2
- * directly above the custom registration template pattern-14.patt.
- */
+
 
 AFRAME.registerComponent('drop-surface-14', {
     init: function () {

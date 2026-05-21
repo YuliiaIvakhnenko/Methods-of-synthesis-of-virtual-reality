@@ -1,4 +1,4 @@
-use strict';
+'use strict';
 
 (function() {
     const THREE = AFRAME.THREE;
@@ -6,22 +6,23 @@ use strict';
     function createDropGeometry() {
         const positions = [];
         const indices = [];
-        const rows = 64;
-        const cols = 112;
+        const rows = 72;
+        const cols = 120;
 
         for (let row = 0; row <= rows; row += 1) {
             const v = row / rows;
             const y = (v - 0.5) * 4.25;
 
-            // Same DROP surface profile as in PA#1/PA#2.
+            // DROP surface profile from PA#1/PA#2.
+            // The radius is larger in the lower part and gradually narrows to the top.
             const base = Math.sin(Math.PI * v);
-            const lowerBulge = 1.28 - 0.63 * v;
-            const topTaper = Math.pow(1.0 - 0.12 * v, 1.7);
-            let radius = 1.22 * base * lowerBulge * topTaper;
+            const lowerBulge = 1.32 - 0.66 * v;
+            const topTaper = Math.pow(1.0 - 0.10 * v, 1.7);
+            let radius = 1.20 * base * lowerBulge * topTaper;
 
             const verticalWave = 1.0 + 0.035 * Math.sin(4.0 * Math.PI * v);
             radius *= verticalWave;
-            radius = Math.max(radius, 0.015);
+            radius = Math.max(radius, 0.012);
 
             for (let col = 0; col <= cols; col += 1) {
                 const u = col / cols;
@@ -82,33 +83,33 @@ use strict';
         }
     }
 
-    function createNeedle() {
+    function createCompassNeedle() {
         const group = new THREE.Group();
 
-        const headShape = new THREE.Shape();
-        headShape.moveTo(0.0, 0.72);
-        headShape.lineTo(-0.25, 0.2);
-        headShape.lineTo(0.25, 0.2);
-        headShape.lineTo(0.0, 0.72);
-
-        const headGeometry = new THREE.ShapeGeometry(headShape);
-        const headMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff3045,
-            side: THREE.DoubleSide,
+        const needleGeometry = new THREE.ConeGeometry(0.13, 0.70, 32);
+        const needleMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.95,
             depthTest: false
         });
-        const head = new THREE.Mesh(headGeometry, headMaterial);
-        head.position.set(0, 2.55, 0.92);
-        group.add(head);
+        const needle = new THREE.Mesh(needleGeometry, needleMaterial);
+        needle.position.set(0, 2.55, 0);
+        needle.rotation.x = Math.PI;
+        needle.renderOrder = 8;
+        group.add(needle);
 
-        const tailGeometry = new THREE.BoxGeometry(0.12, 1.35, 0.06);
-        const tailMaterial = new THREE.MeshBasicMaterial({
-            color: 0x22d3ee,
+        const centerGeometry = new THREE.SphereGeometry(0.13, 24, 16);
+        const centerMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.95,
             depthTest: false
         });
-        const tail = new THREE.Mesh(tailGeometry, tailMaterial);
-        tail.position.set(0, 2.56, 0.0);
-        group.add(tail);
+        const center = new THREE.Mesh(centerGeometry, centerMaterial);
+        center.position.set(0, 0, 0);
+        center.renderOrder = 8;
+        group.add(center);
 
         return group;
     }
@@ -131,8 +132,12 @@ use strict';
                 video.style.position = 'fixed';
                 video.style.top = '0';
                 video.style.left = '0';
+                video.style.right = '0';
+                video.style.bottom = '0';
                 video.style.width = '100vw';
                 video.style.height = '100vh';
+                video.style.minWidth = '100vw';
+                video.style.minHeight = '100vh';
                 video.style.objectFit = 'cover';
                 video.style.display = 'block';
                 video.style.visibility = 'visible';
@@ -150,8 +155,7 @@ use strict';
             scene.addEventListener('renderstart', applyRendererTransparency);
         }
 
-        // AR.js creates the video asynchronously, so repeat the fix a few times.
-        [300, 800, 1500, 2500, 4000].forEach(function(delay) {
+        [200, 500, 900, 1500, 2500, 4000].forEach(function(delay) {
             window.setTimeout(function() {
                 applyRendererTransparency();
                 applyVideoStyles();
@@ -164,50 +168,57 @@ use strict';
             const group = new THREE.Group();
             const geometry = createDropGeometry();
 
-            // Rotate the DROP surface onto the marker plane so it is clearly visible
-            // when the marker is displayed on a laptop screen.
-            group.rotation.x = -Math.PI / 2;
+            // Do NOT rotate the group onto the marker plane: the DROP should stand above
+            // the marker, like a visible AR object, not lie flat as a circle.
+            group.rotation.set(0, 0, 0);
 
             const surfaceMaterial = new THREE.MeshBasicMaterial({
-                color: 0xffffff,
+                color: 0x22c55e,
                 side: THREE.DoubleSide,
                 transparent: true,
-                opacity: 0.36,
+                opacity: 0.48,
                 depthTest: false
             });
 
             const surface = new THREE.Mesh(geometry, surfaceMaterial);
-            surface.renderOrder = 3;
+            surface.renderOrder = 5;
             group.add(surface);
 
             const wireframe = new THREE.LineSegments(
                 new THREE.WireframeGeometry(geometry),
                 new THREE.LineBasicMaterial({
-                    color: 0xffb020,
+                    color: 0xffffff,
                     transparent: true,
-                    opacity: 1.0,
+                    opacity: 0.95,
                     depthTest: false
                 })
             );
-            wireframe.renderOrder = 4;
+            wireframe.renderOrder = 6;
             group.add(wireframe);
 
-            const outline = new THREE.LineSegments(
+            const cyanOutline = new THREE.LineSegments(
                 new THREE.WireframeGeometry(geometry),
                 new THREE.LineBasicMaterial({
-                    color: 0x00e5ff,
+                    color: 0x38bdf8,
                     transparent: true,
-                    opacity: 0.8,
+                    opacity: 0.75,
                     depthTest: false
                 })
             );
-            outline.scale.set(1.012, 1.012, 1.012);
-            outline.renderOrder = 5;
-            group.add(outline);
+            cyanOutline.scale.set(1.02, 1.02, 1.02);
+            cyanOutline.renderOrder = 7;
+            group.add(cyanOutline);
 
-            group.add(createNeedle());
+            group.add(createCompassNeedle());
 
             this.el.setObject3D('dropSurface', group);
+        },
+
+        tick: function(time) {
+            const object = this.el.getObject3D('dropSurface');
+            if (object) {
+                object.rotation.y = time * 0.00035;
+            }
         }
     });
 
@@ -222,7 +233,7 @@ use strict';
         }
 
         marker.addEventListener('markerFound', function() {
-            status.textContent = 'Marker found: DROP surface is aligned to template 14.';
+            status.textContent = 'Marker found: green DROP surface is aligned to template 14.';
             status.classList.add('ok');
             makeCameraVideoVisible();
         });

@@ -1,40 +1,46 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Variant 14 AR Marker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Variant 14 Registration Template</title>
     <style>
+        html,
         body {
             margin: 0;
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            background: #f8fafc;
-            font-family: Arial, Helvetica, sans-serif;
+            min-height: 100%;
+            background: #ffffff;
+            font-family: Arial, sans-serif;
+            color: #111827;
         }
 
-        main {
-            text-align: center;
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+            padding: 24px;
+            box-sizing: border-box;
         }
 
         img {
-            width: min(82vmin, 620px);
+            width: min(82vmin, 760px);
             height: auto;
             image-rendering: auto;
-            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
         }
 
         p {
-            margin-top: 18px;
-            color: #334155;
+            margin: 0;
+            max-width: 720px;
+            text-align: center;
+            font-size: 15px;
+            color: #374151;
         }
     </style>
 </head>
 <body>
-    <main>
-        <img src="./assets/pattern-14.png" alt="Variant 14 AR registration marker">
-        <p>Open this page on a desktop screen or print this marker, then point the phone camera at it.</p>
-    </main>
+    <img src="src/pattern-14.png" alt="Variant 14 AR registration marker">
+    <p>Open this marker on the laptop screen. Then open <strong>index.html</strong> on the phone and point the camera at this template.</p>
 </body>
 </html>

@@ -10,6 +10,26 @@ let webcamVideo;
 let webcamTexture;
 let webcamReady = false;
 let webcamStarted = false;
+let orientationNeedle;
+let magnetometerSocket = null;
+
+const MAGNETOMETER_SENSOR_TYPE = 'android.sensor.magnetic_field';
+const SENSOR_URL_STORAGE_KEY = 'pa2SensorServerUrl';
+const SENSOR_SMOOTHING = 0.18;
+
+const sensorState = {
+    connected: false,
+    enabled: true,
+    hasReading: false,
+    raw: [0, 0, 0],
+    accuracy: null,
+    headingRad: 0,
+    filteredHeadingRad: 0,
+    zeroOffsetRad: 0,
+    magnitude: 0,
+    samples: 0,
+    lastMessageAt: 0
+};
 
 const FAR_CLIPPING_DISTANCE = 120.0;
 // The DROP surface is intentionally placed in front of the convergence plane.
@@ -116,7 +136,8 @@ function drawWebcamPlane(eyeModelView) {
 }
 
 function drawStereoSurface(eyeModelView) {
-    const modelView = eyeModelView.call(stereoCam, spaceball.getViewMatrix());
+    const surfaceMatrix = getSurfaceOrientationMatrix();
+    const modelView = eyeModelView.call(stereoCam, surfaceMatrix);
     gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, modelView);
     gl.uniform1i(shProgram.iUseTexture, 0);
 
@@ -129,6 +150,44 @@ function drawStereoSurface(eyeModelView) {
     gl.lineWidth(1.0);
     gl.uniform4fv(shProgram.iColor, [1.0, 1.0, 1.0, 1.0]);
     surface.DrawWireframe();
+
+    drawOrientationNeedle(eyeModelView, surfaceMatrix);
+}
+
+function getSurfaceOrientationMatrix() {
+    if (sensorState.enabled && sensorState.hasReading) {
+        const headingRad = normalizeAngle(sensorState.filteredHeadingRad - sensorState.zeroOffsetRad);
+        const sensorYawMatrix = createMagnetometerOrientationMatrix(headingRad);
+
+        return m4.multiply(
+            m4.translation(0, 0, -MODEL_NEGATIVE_PARALLAX_DISTANCE),
+            sensorYawMatrix
+        );
+    }
+
+    return spaceball.getViewMatrix();
+}
+
+function createMagnetometerOrientationMatrix(headingRad) {
+    // Variant 14 uses only the magnetometer vector. Without accelerometer data
+    // there is no reliable pitch/roll compensation, so the orientation matrix
+    // contains compass-like yaw rotation only.
+    return m4.yRotation(-headingRad);
+}
+
+function drawOrientationNeedle(eyeModelView, surfaceMatrix) {
+    if (!orientationNeedle) {
+        return;
+    }
+
+    gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, eyeModelView.call(stereoCam, surfaceMatrix));
+    gl.uniform1i(shProgram.iUseTexture, 0);
+    gl.uniform4fv(shProgram.iColor, [0.95, 0.82, 0.32, 1.0]);
+    orientationNeedle.Draw();
+
+    gl.lineWidth(1.0);
+    gl.uniform4fv(shProgram.iColor, [0.05, 0.05, 0.07, 1.0]);
+    orientationNeedle.DrawWireframe();
 }
 
 function initGL() {
@@ -150,6 +209,11 @@ function initGL() {
     CreateSurfaceData(surfaceData);
     surface = new Model('Parametric surface');
     surface.BufferData(surfaceData.verticesF32, surfaceData.indicesU16);
+
+    const needleData = {};
+    CreateCompassNeedleData(needleData);
+    orientationNeedle = new Model('Compass orientation marker');
+    orientationNeedle.BufferData(needleData.verticesF32, needleData.indicesU16);
 
     const videoPlaneData = {};
     CreateVideoPlaneData(videoPlaneData, 1, 1);
@@ -412,7 +476,309 @@ function init() {
         startButton.addEventListener('click', startWebcam);
     }
 
+    initSensorControls();
+
     requestAnimationFrame(renderFrame);
+}
+
+
+function initSensorControls() {
+    const urlInput = document.getElementById('sensorUrl');
+    const connectButton = document.getElementById('connectSensorButton');
+    const disconnectButton = document.getElementById('disconnectSensorButton');
+    const calibrateButton = document.getElementById('calibrateSensorButton');
+    const useSensorCheckbox = document.getElementById('useSensorRotation');
+
+    if (urlInput) {
+        const savedUrl = localStorage.getItem(SENSOR_URL_STORAGE_KEY);
+        if (savedUrl) {
+            urlInput.value = savedUrl;
+        }
+    }
+
+    if (connectButton) {
+        connectButton.addEventListener('click', connectMagnetometerSensor);
+    }
+
+    if (disconnectButton) {
+        disconnectButton.addEventListener('click', disconnectMagnetometerSensor);
+    }
+
+    if (calibrateButton) {
+        calibrateButton.addEventListener('click', calibrateMagnetometerZero);
+    }
+
+    if (useSensorCheckbox) {
+        sensorState.enabled = useSensorCheckbox.checked;
+        useSensorCheckbox.addEventListener('change', function() {
+            sensorState.enabled = useSensorCheckbox.checked;
+            updateSensorStatus(
+                sensorState.enabled
+                    ? 'Sensor rotation is enabled.'
+                    : 'Sensor rotation is disabled. Use mouse/touch to rotate the surface.',
+                sensorState.enabled ? 'ok' : 'warning'
+            );
+        });
+    }
+
+    updateSensorReadout();
+}
+
+function connectMagnetometerSensor() {
+    const urlInput = document.getElementById('sensorUrl');
+    const rawUrl = urlInput ? urlInput.value.trim() : '';
+    const sensorUrl = buildSensorWebSocketUrl(rawUrl);
+
+    if (!sensorUrl) {
+        updateSensorStatus('Enter the Android Sensor Server WebSocket URL.', 'danger');
+        return;
+    }
+
+    if (location.protocol === 'https:' && sensorUrl.startsWith('ws://')) {
+        updateSensorStatus('The page is opened through HTTPS, so the browser may block insecure ws://. Run this page through http://localhost or use wss://.', 'warning');
+    }
+
+    localStorage.setItem(SENSOR_URL_STORAGE_KEY, sensorUrl);
+    disconnectMagnetometerSensor(false);
+
+    try {
+        magnetometerSocket = new WebSocket(sensorUrl);
+    } catch (error) {
+        updateSensorStatus('WebSocket URL is invalid: ' + error.message, 'danger');
+        return;
+    }
+
+    const activeSocket = magnetometerSocket;
+
+    setSensorButtonsBusy(true);
+    updateSensorStatus('Connecting to Sensor Server...', 'warning');
+
+    activeSocket.addEventListener('open', function() {
+        if (magnetometerSocket !== activeSocket) {
+            return;
+        }
+
+        sensorState.connected = true;
+        setSensorButtonsBusy(false);
+        updateSensorStatus('Connected. Rotate the phone flat on the table to rotate the surface like a compass.', 'ok');
+    });
+
+    activeSocket.addEventListener('message', function(event) {
+        if (magnetometerSocket === activeSocket) {
+            handleMagnetometerMessage(event.data);
+        }
+    });
+
+    activeSocket.addEventListener('error', function() {
+        if (magnetometerSocket !== activeSocket) {
+            return;
+        }
+
+        updateSensorStatus('WebSocket error. Check phone IP/port, Sensor Server status and Wi‑Fi network.', 'danger');
+        setSensorButtonsBusy(false);
+    });
+
+    activeSocket.addEventListener('close', function() {
+        if (magnetometerSocket !== activeSocket) {
+            return;
+        }
+
+        sensorState.connected = false;
+        setSensorButtonsBusy(false);
+        updateSensorStatus('Disconnected from Sensor Server.', sensorState.hasReading ? 'warning' : 'danger');
+        magnetometerSocket = null;
+    });
+}
+
+function disconnectMagnetometerSensor(showStatus) {
+    if (showStatus === undefined) {
+        showStatus = true;
+    }
+
+    if (magnetometerSocket) {
+        const socket = magnetometerSocket;
+        magnetometerSocket = null;
+        socket.close();
+    }
+
+    sensorState.connected = false;
+    setSensorButtonsBusy(false);
+
+    if (showStatus) {
+        updateSensorStatus('Disconnected. Last received orientation is kept until a new connection is opened.', 'warning');
+    }
+}
+
+function buildSensorWebSocketUrl(input) {
+    if (!input) {
+        return '';
+    }
+
+    if (input.startsWith('ws://') || input.startsWith('wss://')) {
+        return input;
+    }
+
+    const host = input.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    return 'ws://' + host + '/sensor/connect?type=' + encodeURIComponent(MAGNETOMETER_SENSOR_TYPE);
+}
+
+function handleMagnetometerMessage(rawMessage) {
+    const payload = parseSensorPayload(rawMessage);
+    if (!payload || !payload.values || payload.values.length < 3) {
+        return;
+    }
+
+    const mx = Number(payload.values[0]);
+    const my = Number(payload.values[1]);
+    const mz = Number(payload.values[2]);
+
+    if (!Number.isFinite(mx) || !Number.isFinite(my) || !Number.isFinite(mz)) {
+        return;
+    }
+
+    updateMagnetometerOrientation(mx, my, mz, payload.accuracy);
+}
+
+function parseSensorPayload(rawMessage) {
+    let data;
+
+    try {
+        data = JSON.parse(rawMessage);
+    } catch (error) {
+        console.warn('Sensor message is not JSON:', rawMessage);
+        return null;
+    }
+
+    if (data && Array.isArray(data.values)) {
+        return data;
+    }
+
+    if (Array.isArray(data) && data.length >= 3) {
+        return { values: data };
+    }
+
+    if (Array.isArray(data)) {
+        for (let i = 0; i < data.length; i += 1) {
+            if (data[i] && Array.isArray(data[i].values)) {
+                return data[i];
+            }
+        }
+    }
+
+    if (data && data[MAGNETOMETER_SENSOR_TYPE] && Array.isArray(data[MAGNETOMETER_SENSOR_TYPE].values)) {
+        return data[MAGNETOMETER_SENSOR_TYPE];
+    }
+
+    return null;
+}
+
+function updateMagnetometerOrientation(mx, my, mz, accuracy) {
+    const horizontalMagnitude = Math.sqrt(mx * mx + my * my);
+    const magnitude = Math.sqrt(mx * mx + my * my + mz * mz);
+
+    if (horizontalMagnitude < 0.001) {
+        updateSensorStatus('Magnetometer horizontal vector is too small. Keep the phone flat and away from metal objects.', 'warning');
+        return;
+    }
+
+    const headingRad = normalizeAngle(Math.atan2(-mx, my));
+
+    if (!sensorState.hasReading) {
+        sensorState.filteredHeadingRad = headingRad;
+    } else {
+        const delta = shortestAngleDelta(sensorState.filteredHeadingRad, headingRad);
+        sensorState.filteredHeadingRad = normalizeAngle(sensorState.filteredHeadingRad + delta * SENSOR_SMOOTHING);
+    }
+
+    sensorState.connected = true;
+    sensorState.hasReading = true;
+    sensorState.raw = [mx, my, mz];
+    sensorState.accuracy = accuracy;
+    sensorState.headingRad = headingRad;
+    sensorState.magnitude = magnitude;
+    sensorState.samples += 1;
+    sensorState.lastMessageAt = performance.now();
+
+    updateSensorReadout();
+}
+
+function calibrateMagnetometerZero() {
+    if (!sensorState.hasReading) {
+        updateSensorStatus('No magnetometer data yet. Connect Sensor Server first.', 'warning');
+        return;
+    }
+
+    sensorState.zeroOffsetRad = sensorState.filteredHeadingRad;
+    updateSensorStatus('Current phone direction is saved as zero. Further rotations are applied relative to this direction.', 'ok');
+    updateSensorReadout();
+}
+
+function updateSensorReadout() {
+    const heading = document.getElementById('sensorHeading');
+    const magnitude = document.getElementById('sensorMagnitude');
+    const values = document.getElementById('sensorValues');
+    const accuracy = document.getElementById('sensorAccuracy');
+
+    if (!sensorState.hasReading) {
+        setText(heading, '—');
+        setText(magnitude, '—');
+        setText(values, '—');
+        setText(accuracy, '—');
+        return;
+    }
+
+    const relativeHeading = normalizeAngle(sensorState.filteredHeadingRad - sensorState.zeroOffsetRad);
+    setText(heading, formatDegrees(relativeHeading) + '°');
+    setText(magnitude, sensorState.magnitude.toFixed(1) + ' µT');
+    setText(values, sensorState.raw.map(function(value) { return value.toFixed(1); }).join(', '));
+    setText(accuracy, sensorState.accuracy === null || sensorState.accuracy === undefined ? '—' : String(sensorState.accuracy));
+}
+
+function updateSensorStatus(message, mode) {
+    const status = document.getElementById('sensorStatus');
+    if (!status) {
+        return;
+    }
+
+    status.textContent = message;
+    status.classList.remove('ok', 'warning', 'danger');
+    if (mode) {
+        status.classList.add(mode);
+    }
+}
+
+function setSensorButtonsBusy(isBusy) {
+    const connectButton = document.getElementById('connectSensorButton');
+    if (connectButton) {
+        connectButton.disabled = isBusy;
+    }
+}
+
+function setText(element, value) {
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+function normalizeAngle(angle) {
+    let normalized = angle;
+    while (normalized <= -Math.PI) {
+        normalized += Math.PI * 2.0;
+    }
+    while (normalized > Math.PI) {
+        normalized -= Math.PI * 2.0;
+    }
+    return normalized;
+}
+
+function shortestAngleDelta(fromAngle, toAngle) {
+    return normalizeAngle(toAngle - fromAngle);
+}
+
+function formatDegrees(radians) {
+    const degrees = radians * 180.0 / Math.PI;
+    const positiveDegrees = (degrees + 360.0) % 360.0;
+    return positiveDegrees.toFixed(1);
 }
 
 function initControls() {

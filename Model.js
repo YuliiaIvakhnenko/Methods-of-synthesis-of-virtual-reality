@@ -191,3 +191,35 @@ function CreateVideoPlaneData(data, width, height) {
         0, 2, 3
     ]);
 }
+
+/**
+ * Creates a small asymmetric compass marker attached to the DROP model.
+ * The DROP surface is almost rotationally symmetric, so this marker makes the
+ * magnetometer yaw rotation visible during PA#2 demonstration.
+ */
+function CreateCompassNeedleData(data) {
+    data.verticesF32 = new Float32Array([
+        // Arrow head, points to +Z in the model's local coordinates.
+         0.00, 2.55,  1.85,
+        -0.34, 2.55,  0.95,
+         0.34, 2.55,  0.95,
+
+        // Arrow tail rectangle.
+        -0.12, 2.55,  0.95,
+         0.12, 2.55,  0.95,
+         0.12, 2.55, -0.95,
+        -0.12, 2.55, -0.95,
+
+        // Small vertical fin so the marker is visible from camera direction.
+         0.00, 2.55,  1.55,
+         0.00, 2.95,  0.85,
+         0.00, 2.55,  0.15
+    ]);
+
+    data.indicesU16 = new Uint16Array([
+        0, 1, 2,
+        3, 4, 5,
+        3, 5, 6,
+        7, 8, 9
+    ]);
+}

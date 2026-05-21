@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PA#1 — WebGL Stereo Camera DROP</title>
+    <title>PA#2 — Tangible interface with Android magnetometer</title>
     <style>
         :root {
             --bg: #10131a;
@@ -11,6 +11,9 @@
             --text: #e7ecf7;
             --muted: #aab4c6;
             --accent: #6fb6ff;
+            --ok: #70e08d;
+            --warning: #ffd166;
+            --danger: #ff8b8b;
             --border: #30384a;
         }
 
@@ -45,7 +48,7 @@
 
         .layout {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) 340px;
+            grid-template-columns: minmax(0, 1fr) 360px;
             gap: 18px;
             align-items: start;
         }
@@ -79,6 +82,10 @@
             padding: 18px;
         }
 
+        .panel + .panel {
+            margin-top: 18px;
+        }
+
         .panel h2 {
             margin: 0 0 14px;
             font-size: 18px;
@@ -92,7 +99,8 @@
             margin-bottom: 16px;
         }
 
-        .control label {
+        .control label,
+        .sensor-control label {
             grid-column: 1 / -1;
             color: var(--text);
             font-size: 14px;
@@ -103,13 +111,18 @@
             accent-color: var(--accent);
         }
 
-        input[type="number"] {
-            width: 78px;
-            padding: 7px 8px;
+        input[type="number"],
+        input[type="text"] {
+            width: 100%;
+            padding: 8px 9px;
             border: 1px solid var(--border);
             border-radius: 8px;
             background: #101522;
             color: var(--text);
+        }
+
+        input[type="number"] {
+            width: 78px;
         }
 
         button {
@@ -125,6 +138,89 @@
 
         button:hover {
             filter: brightness(1.08);
+        }
+
+        button.secondary {
+            background: #2d374b;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .sensor-control {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .sensor-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0 12px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .status {
+            padding: 9px 10px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #101522;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .status.ok {
+            border-color: rgba(112, 224, 141, 0.5);
+            color: var(--ok);
+        }
+
+        .status.warning {
+            border-color: rgba(255, 209, 102, 0.55);
+            color: var(--warning);
+        }
+
+        .status.danger {
+            border-color: rgba(255, 139, 139, 0.55);
+            color: var(--danger);
+        }
+
+        .sensor-readout {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .readout-card {
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #101522;
+        }
+
+        .readout-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .readout-card strong {
+            font-size: 15px;
         }
 
         .hint,
@@ -157,20 +253,20 @@
         }
     </style>
 
-    <script defer src="./Utils/trackball-rotator.js?v=pa1-drop-v3"></script>
-    <script defer src="./Utils/m4.js?v=pa1-drop-v3"></script>
-    <script defer src="./shader.js?v=pa1-drop-v3"></script>
-    <script defer src="./Model.js?v=pa1-drop-v3"></script>
-    <script defer src="./StereoCamera.js?v=pa1-drop-v3"></script>
-    <script defer src="./main.js?v=pa1-drop-v3"></script>
+    <script defer src="./Utils/trackball-rotator.js?v=pa2-magnetometer"></script>
+    <script defer src="./Utils/m4.js?v=pa2-magnetometer"></script>
+    <script defer src="./shader.js?v=pa2-magnetometer"></script>
+    <script defer src="./Model.js?v=pa2-magnetometer"></script>
+    <script defer src="./StereoCamera.js?v=pa2-magnetometer"></script>
+    <script defer src="./main.js?v=pa2-magnetometer"></script>
 </head>
 <body>
 <main>
-    <h1>PA#1 — WebGL anaglyphic stereo camera — DROP model</h1>
+    <h1>PA#2 — Tangible interface: Android magnetometer controls the surface</h1>
     <p class="subtitle">
-        Drag the DROP model with the mouse to rotate it around the center of mass. Use red/cyan anaglyphic glasses.
-        The webcam stream is drawn in the zero-parallax plane, while the wireframe surface is placed closer to
-        the viewer to create negative parallax.
+        This version keeps PA#1 capabilities and adds a smartphone as a tangible controller. Android Sensor Server streams
+        hardware magnetometer data through WebSocket. Because variant 14 uses only one magnetometer vector, the DROP surface
+        receives compass-like yaw rotation around the vertical axis. Keep the phone as flat as possible for a stable result.
     </p>
 
     <div class="layout">
@@ -178,40 +274,89 @@
             <canvas width="960" height="720" id="webglcanvas"></canvas>
         </div>
 
-        <aside class="panel">
-            <h2>Stereo camera parameters</h2>
+        <div>
+            <aside class="panel">
+                <h2>Android Sensor Server</h2>
 
-            <div class="control">
-                <label for="eyeSeparation">Eye separation</label>
-                <input id="eyeSeparation" type="range" min="0.00" max="1.20" step="0.01" value="0.34">
-                <input id="eyeSeparationValue" type="number" min="0.00" max="1.20" step="0.01" value="0.34">
-            </div>
+                <div class="sensor-control">
+                    <label for="sensorUrl">WebSocket URL</label>
+                    <input id="sensorUrl" type="text" value="ws://192.168.0.100:8080/sensor/connect?type=android.sensor.magnetic_field">
+                </div>
 
-            <div class="control">
-                <label for="fovDegrees">Field of View angle, degrees</label>
-                <input id="fovDegrees" type="range" min="24" max="90" step="1" value="45">
-                <input id="fovDegreesValue" type="number" min="24" max="90" step="1" value="45">
-            </div>
+                <div class="sensor-actions">
+                    <button id="connectSensorButton" type="button">Connect</button>
+                    <button id="disconnectSensorButton" class="secondary" type="button">Disconnect</button>
+                </div>
 
-            <div class="control">
-                <label for="nearClippingDistance">Near clipping distance</label>
-                <input id="nearClippingDistance" type="range" min="0.20" max="7.50" step="0.05" value="1.00">
-                <input id="nearClippingDistanceValue" type="number" min="0.20" max="7.50" step="0.05" value="1.00">
-            </div>
+                <button id="calibrateSensorButton" class="secondary" type="button">Set current phone direction as zero</button>
 
-            <div class="control">
-                <label for="convergence">Convergence distance / zero-parallax plane</label>
-                <input id="convergence" type="range" min="4.00" max="20.00" step="0.10" value="8.00">
-                <input id="convergenceValue" type="number" min="4.00" max="20.00" step="0.10" value="8.00">
-            </div>
+                <label class="checkbox-row">
+                    <input id="useSensorRotation" type="checkbox" checked>
+                    Use magnetometer to rotate the surface. Turn off to use mouse trackball.
+                </label>
 
-            <button id="startWebcamButton" type="button">Start / restart webcam</button>
-            <p id="webcamStatus">Webcam is not started yet. Press the button and allow camera access.</p>
+                <p id="sensorStatus" class="status warning">Not connected. Start Sensor Server on Android, check that phone and PC are in the same Wi‑Fi network, then enter the WebSocket URL and press Connect.</p>
 
-            <p class="hint">
-                Run from localhost or HTTPS. Near clipping becomes clearly visible at high values: it cuts the DROP model when the near plane reaches the object. If Chrome blocks the camera, click the icon near the address bar → Camera → Allow, then reload the page.
-            </p>
-        </aside>
+                <div class="sensor-readout">
+                    <div class="readout-card">
+                        <span>Heading</span>
+                        <strong id="sensorHeading">—</strong>
+                    </div>
+                    <div class="readout-card">
+                        <span>Magnetic field</span>
+                        <strong id="sensorMagnitude">—</strong>
+                    </div>
+                    <div class="readout-card">
+                        <span>X, Y, Z</span>
+                        <strong id="sensorValues">—</strong>
+                    </div>
+                    <div class="readout-card">
+                        <span>Accuracy</span>
+                        <strong id="sensorAccuracy">—</strong>
+                    </div>
+                </div>
+
+                <p class="hint">
+                    Expected Android endpoint: <code>ws://PHONE_IP:PORT/sensor/connect?type=android.sensor.magnetic_field</code>.
+                    The received vector is converted to a 4×4 orientation matrix with yaw = atan2(-mx, my).
+                </p>
+            </aside>
+
+            <aside class="panel">
+                <h2>Stereo camera parameters</h2>
+
+                <div class="control">
+                    <label for="eyeSeparation">Eye separation</label>
+                    <input id="eyeSeparation" type="range" min="0.00" max="1.20" step="0.01" value="0.34">
+                    <input id="eyeSeparationValue" type="number" min="0.00" max="1.20" step="0.01" value="0.34">
+                </div>
+
+                <div class="control">
+                    <label for="fovDegrees">Field of View angle, degrees</label>
+                    <input id="fovDegrees" type="range" min="24" max="90" step="1" value="45">
+                    <input id="fovDegreesValue" type="number" min="24" max="90" step="1" value="45">
+                </div>
+
+                <div class="control">
+                    <label for="nearClippingDistance">Near clipping distance</label>
+                    <input id="nearClippingDistance" type="range" min="0.20" max="7.50" step="0.05" value="1.00">
+                    <input id="nearClippingDistanceValue" type="number" min="0.20" max="7.50" step="0.05" value="1.00">
+                </div>
+
+                <div class="control">
+                    <label for="convergence">Convergence distance / zero-parallax plane</label>
+                    <input id="convergence" type="range" min="4.00" max="20.00" step="0.10" value="8.00">
+                    <input id="convergenceValue" type="number" min="4.00" max="20.00" step="0.10" value="8.00">
+                </div>
+
+                <button id="startWebcamButton" type="button">Start / restart webcam</button>
+                <p id="webcamStatus">Webcam is not started yet. Press the button and allow camera access.</p>
+
+                <p class="hint">
+                    Run from localhost or HTTPS. Near clipping becomes clearly visible at high values: it cuts the DROP model when the near plane reaches the object.
+                </p>
+            </aside>
+        </div>
     </div>
 
     <video id="webcamVideo" autoplay muted playsinline></video>

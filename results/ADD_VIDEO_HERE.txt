@@ -1,2 +1,0 @@
-Put your demonstration video here before final submission.
-The repository already contains the registration template image in assets/pattern-14.png.

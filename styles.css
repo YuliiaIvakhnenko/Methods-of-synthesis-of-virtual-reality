@@ -1,94 +1,84 @@
 html,
 body {
     margin: 0;
+    padding: 0;
     overflow: hidden;
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
+    min-width: 100vw;
+    min-height: 100vh;
+    position: fixed;
+    inset: 0;
     font-family: Arial, Helvetica, sans-serif;
+    background: #000;
+    touch-action: none;
+}
+
+a-scene,
+.a-canvas,
+canvas {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-width: 100vw !important;
+    min-height: 100vh !important;
     background: transparent !important;
 }
 
-/* Important for mobile: the camera video must stay visible behind the WebGL canvas. */
+/* AR.js camera layer. Center it and force it to fill the visible mobile viewport. */
 video,
 #arjs-video,
 .arjs-video {
     position: fixed !important;
-    inset: 0 !important;
-    display: block !important;
+    top: 50% !important;
+    left: 50% !important;
     width: 100vw !important;
     height: 100vh !important;
+    min-width: 100vw !important;
+    min-height: 100vh !important;
+    transform: translate(-50%, -50%) !important;
     object-fit: cover !important;
+    object-position: center center !important;
+    display: block !important;
     opacity: 1 !important;
     visibility: visible !important;
     z-index: 0 !important;
-    background: transparent !important;
-}
-
-a-scene {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    background: transparent !important;
-    z-index: 1 !important;
-}
-
-canvas,
-canvas.a-canvas {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    background: transparent !important;
-    z-index: 2 !important;
-}
-
-.ui-panel {
-    position: fixed;
-    left: 10px;
-    right: 10px;
-    top: 10px;
-    z-index: 20;
-    max-width: 520px;
-    padding: 10px 12px;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 12px;
-    background: rgba(15, 23, 42, 0.68);
-    color: #e5e7eb;
-    backdrop-filter: blur(6px);
-    pointer-events: none;
-}
-
-.ui-panel h1 {
-    margin: 0 0 4px;
-    font-size: 16px;
-    line-height: 1.2;
-}
-
-.ui-panel p {
-    margin: 4px 0;
-    font-size: 12px;
-    line-height: 1.3;
-    color: #cbd5e1;
+    background: #000 !important;
 }
 
 .status {
-    display: inline-block;
-    padding: 5px 9px;
-    border-radius: 999px;
-    background: rgba(245, 158, 11, 0.16);
-    color: #fde68a !important;
+    position: fixed;
+    left: 8px;
+    top: 8px;
+    z-index: 30;
+    max-width: calc(100vw - 16px);
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.70);
+    color: #fde68a;
+    font-size: 11px;
+    line-height: 1.2;
     font-weight: 700;
+    pointer-events: none;
 }
 
 .status.ok {
-    background: rgba(34, 197, 94, 0.18);
-    color: #bbf7d0 !important;
+    color: #bbf7d0;
 }
 
-
-/* Keep AR layer stretched on mobile browsers that add side white areas. */
+/* Hide AR.js/A-Frame helper overlays so only camera + model remain visible. */
 .a-enter-vr,
-.a-loader-title {
+.a-enter-ar,
+.a-loader-title,
+.arjs-loader,
+#arjsDebugUIContainer,
+.a-dialog,
+.a-modal,
+.a-orientation-modal,
+.a-hidden,
+.a-fullscreen {
     display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }

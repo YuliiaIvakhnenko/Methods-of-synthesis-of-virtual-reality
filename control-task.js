@@ -116,9 +116,10 @@
             const geometry = createDropGeometry();
 
             const surfaceMaterial = new THREE.MeshStandardMaterial({
-                color: 0xf8fafc,
-                roughness: 0.46,
-                metalness: 0.16,
+                color: 0xffffff,
+                emissive: 0x334155,
+                roughness: 0.38,
+                metalness: 0.12,
                 side: THREE.DoubleSide
             });
 
@@ -130,9 +131,9 @@
             const wireframe = new THREE.LineSegments(
                 new THREE.WireframeGeometry(geometry),
                 new THREE.LineBasicMaterial({
-                    color: 0x0ea5e9,
+                    color: 0xffb020,
                     transparent: true,
-                    opacity: 0.55
+                    opacity: 0.9
                 })
             );
             group.add(wireframe);
